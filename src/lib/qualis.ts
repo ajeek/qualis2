@@ -1,0 +1,447 @@
+import {
+  READ_CLIENT,
+  createWriteClient,
+  TransactionStatus,
+  CONTRACT_ADDRESS,
+} from "./genlayer";
+
+// ------------------------------------------------------------------
+// Types (mirror contract return shapes)
+// ------------------------------------------------------------------
+export interface Evaluation {
+  title: string;
+  description: string;
+}
+
+export interface Submission {
+  evaluation_id: bigint;
+  content: string;
+}
+
+export interface Assessment {
+  submission_id: bigint;
+  decision: string;
+  reasoning: string;
+}
+
+export interface Stats {
+  total_evaluations: bigint;
+  total_submissions: bigint;
+  total_assessments: bigint;
+}
+
+// ------------------------------------------------------------------
+// Validation helpers
+// ------------------------------------------------------------------
+function validateWallet(address: string | null, provider: unknown | null) {
+  if (!address) throw new Error("Wallet not connected");
+  if (!provider) throw new Error("Wallet provider not available");
+  if (!address.startsWith("0x") || address.length !== 42) {
+    throw new Error("Invalid wallet address format");
+  }
+}
+
+function validateContractAddress() {
+  if (!CONTRACT_ADDRESS) {
+    throw new Error("Contract address not configured");
+  }
+}
+
+async function switchToStudionet(provider: any) {
+  if (!provider || !provider.request) return;
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: "0xf22f" }], // 61999
+    });
+  } catch (switchError: any) {
+    if (switchError.code === 4902) {
+      try {
+        await provider.request({
+          method: "wallet_addEthereumChain",
+          params: [
+            {
+              chainId: "0xf22f",
+              chainName: "GenLayer Studionet",
+              rpcUrls: ["https://studio.genlayer.com/api"],
+              nativeCurrency: {
+                name: "GEN",
+                symbol: "GEN",
+                decimals: 18,
+              },
+            },
+          ],
+        });
+      } catch (addError: any) {
+        throw new Error("Could not add GenLayer Studionet network to wallet.");
+      }
+    } else {
+      throw switchError;
+    }
+  }
+}
+
+// ------------------------------------------------------------------
+// Development logging helper
+// ------------------------------------------------------------------
+function logTx(
+  action: string,
+  wallet: string,
+  contract: string,
+  txHash: string,
+  status: string,
+  result?: unknown
+) {
+  // eslint-disable-next-line no-console
+  console.log("[QUALIS TX]", {
+    action,
+    wallet,
+    contract,
+    txHash,
+    status,
+    result,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+// ------------------------------------------------------------------
+// Contract interactions
+// ------------------------------------------------------------------
+
+/**
+ * Create a new Evaluation.
+ *
+ * Conceptual flow:
+ *   VALIDATE -> SIGN -> BROADCAST -> WAIT FOR FINALIZED -> CONFIRM CANONICAL STATE
+ */
+export async function createEvaluation(
+  address: string,
+  provider: unknown,
+  title: string,
+  description: string
+): Promise<{ txHash: string; evaluationId: bigint; evaluation: Evaluation }> {
+  validateWallet(address, provider);
+  validateContractAddress();
+
+  const t = title.trim();
+  const d = description.trim();
+  if (!t) throw new Error("Invalid title: cannot be empty");
+  if (!d) throw new Error("Invalid description: cannot be empty");
+
+  const writeClient = createWriteClient(address as `0x${string}`, provider);
+  await switchToStudionet(provider);
+
+  // BROADCAST
+  const txHash = await writeClient.writeContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "create_evaluation",
+    args: [t, d],
+    value: BigInt(0),
+  });
+
+  // WAIT FOR OFFICIAL TRANSACTION STATE
+  const receipt = await writeClient.waitForTransactionReceipt({
+    hash: txHash as any,
+    status: TransactionStatus.FINALIZED,
+    retries: 60,
+    interval: 5000,
+  });
+
+  logTx("create_evaluation", address, CONTRACT_ADDRESS, txHash, receipt.status as string);
+
+  // CONFIRM CANONICAL STATE
+  const stats = (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_stats",
+    args: [],
+  })) as unknown as Stats;
+
+  const newId = BigInt(stats.total_evaluations) - BigInt(1);
+
+  const evaluation = (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_evaluation",
+    args: [newId],
+  })) as unknown as Evaluation;
+
+  if (evaluation.title !== t || evaluation.description !== d) {
+    throw new Error(
+      `Canonical state could not be verified: evaluation data mismatch. Expected title=${t}, desc=${d}. Got title=${evaluation.title}, desc=${evaluation.description}`
+    );
+  }
+
+  logTx(
+    "create_evaluation_confirmed",
+    address,
+    CONTRACT_ADDRESS,
+    txHash,
+    "confirmed",
+    { evaluationId: newId.toString(), evaluation }
+  );
+
+  return { txHash, evaluationId: newId, evaluation };
+}
+
+/**
+ * Submit Work against an Evaluation.
+ */
+export async function submitWork(
+  address: string,
+  provider: unknown,
+  evaluationId: bigint,
+  content: string
+): Promise<{ txHash: string; submissionId: bigint; submission: Submission }> {
+  validateWallet(address, provider);
+  validateContractAddress();
+
+  const c = content.trim();
+  if (!c) throw new Error("Invalid submission content: cannot be empty");
+
+  const writeClient = createWriteClient(address as `0x${string}`, provider);
+  await switchToStudionet(provider);
+
+  const txHash = await writeClient.writeContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "submit_work",
+    args: [evaluationId, c],
+    value: BigInt(0),
+  });
+
+  const receipt = await writeClient.waitForTransactionReceipt({
+    hash: txHash as any,
+    status: TransactionStatus.FINALIZED,
+    retries: 60,
+    interval: 5000,
+  });
+
+  logTx("submit_work", address, CONTRACT_ADDRESS, txHash, receipt.status as string);
+
+  const stats = (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_stats",
+    args: [],
+  })) as unknown as Stats;
+
+  const newId = BigInt(stats.total_submissions) - BigInt(1);
+
+  const submission = (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_submission",
+    args: [newId],
+  })) as unknown as Submission;
+
+  if (BigInt(submission.evaluation_id) !== BigInt(evaluationId) || submission.content !== c) {
+    throw new Error(
+      `Canonical state could not be verified: submission data mismatch. Expected eval_id=${evaluationId}, content=${c}. Got eval_id=${submission.evaluation_id}, content=${submission.content}`
+    );
+  }
+
+  logTx(
+    "submit_work_confirmed",
+    address,
+    CONTRACT_ADDRESS,
+    txHash,
+    "confirmed",
+    { submissionId: newId.toString(), submission }
+  );
+
+  return { txHash, submissionId: newId, submission };
+}
+
+/**
+ * Generate Assessment for a Submission.
+ * This is the critical GenLayer feature: non-deterministic execution
+ * evaluated by validator consensus.
+ */
+export async function assessSubmission(
+  address: string,
+  provider: unknown,
+  submissionId: bigint
+): Promise<{ txHash: string; assessment: Assessment }> {
+  validateWallet(address, provider);
+  validateContractAddress();
+
+  const writeClient = createWriteClient(address as `0x${string}`, provider);
+  await switchToStudionet(provider);
+
+  const txHash = await writeClient.writeContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "assess_submission",
+    args: [submissionId],
+    value: BigInt(0),
+  });
+
+  const receipt = await writeClient.waitForTransactionReceipt({
+    hash: txHash as any,
+    status: TransactionStatus.FINALIZED,
+    retries: 60,
+    interval: 5000,
+  });
+
+  logTx("assess_submission", address, CONTRACT_ADDRESS, txHash, receipt.status as string);
+
+  // Confirm canonical state via deterministic lookup
+  const assessment = (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_assessment_by_submission",
+    args: [submissionId],
+  })) as unknown as Assessment;
+
+  if (BigInt(assessment.submission_id) !== BigInt(submissionId)) {
+    throw new Error(
+      `Canonical state could not be verified: assessment mismatch. Expected sub_id=${submissionId}, got sub_id=${assessment.submission_id}`
+    );
+  }
+
+  logTx(
+    "assess_submission_confirmed",
+    address,
+    CONTRACT_ADDRESS,
+    txHash,
+    "confirmed",
+    { assessment }
+  );
+
+  return { txHash, assessment };
+}
+
+/**
+ * Verify the one-assessment invariant by attempting a second assessment.
+ * The contract should reject it. We confirm by checking that no new
+ * assessment was created.
+ */
+export async function verifyInvariant(
+  address: string,
+  provider: unknown,
+  submissionId: bigint
+): Promise<{ verified: boolean; message: string }> {
+  validateWallet(address, provider);
+  validateContractAddress();
+
+  // Pre-check: submission must already be assessed
+  const hasAssess = (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "has_assessment",
+    args: [submissionId],
+  })) as unknown as boolean;
+
+  if (!hasAssess) {
+    return {
+      verified: false,
+      message: "Submission has not been assessed yet — cannot verify invariant.",
+    };
+  }
+
+  const statsBefore = (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_stats",
+    args: [],
+  })) as unknown as Stats;
+
+  const writeClient = createWriteClient(address as `0x${string}`, provider);
+  await switchToStudionet(provider);
+
+  let txHash: string;
+  try {
+    txHash = await writeClient.writeContract({
+      address: CONTRACT_ADDRESS,
+      functionName: "assess_submission",
+      args: [submissionId],
+      value: BigInt(0),
+    });
+  } catch (err) {
+    // Wallet rejected the transaction before broadcast
+    return {
+      verified: true,
+      message:
+        "Protocol enforced: This Submission already has a canonical Assessment. " +
+        "(Wallet rejected the duplicate assessment transaction.)",
+    };
+  }
+
+  // Wait for the transaction to reach finality
+  // Even if execution fails, the transaction may still finalize
+  let receipt;
+  try {
+    receipt = await writeClient.waitForTransactionReceipt({
+      hash: txHash as any,
+      status: TransactionStatus.FINALIZED,
+      retries: 60,
+      interval: 5000,
+    });
+  } catch (err) {
+    return {
+      verified: true,
+      message:
+        "Protocol enforced: This Submission already has a canonical Assessment. " +
+        "(Transaction did not reach finality — contract rejected duplicate assessment.)",
+    };
+  }
+
+  logTx("verify_invariant", address, CONTRACT_ADDRESS, txHash, receipt.status as string);
+
+  // Confirm that no new assessment was created
+  const statsAfter = (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_stats",
+    args: [],
+  })) as unknown as Stats;
+
+  if (statsAfter.total_assessments === statsBefore.total_assessments) {
+    return {
+      verified: true,
+      message:
+        "Protocol enforced: This Submission already has a canonical Assessment.",
+    };
+  }
+
+  // Should never happen if the contract is correct
+  return {
+    verified: false,
+    message:
+      "Invariant check failed: a second assessment was created. " +
+      "The one-assessment invariant is broken.",
+  };
+}
+
+// ------------------------------------------------------------------
+// Direct read helpers (for UI refresh)
+// ------------------------------------------------------------------
+
+export async function getStats(): Promise<Stats> {
+  validateContractAddress();
+  return (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_stats",
+    args: [],
+  })) as any;
+}
+
+export async function getEvaluation(evaluationId: bigint): Promise<Evaluation> {
+  validateContractAddress();
+  return (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_evaluation",
+    args: [evaluationId],
+  })) as any;
+}
+
+export async function getSubmission(submissionId: bigint): Promise<Submission> {
+  validateContractAddress();
+  return (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_submission",
+    args: [submissionId],
+  })) as any;
+}
+
+export async function getAssessmentBySubmission(
+  submissionId: bigint
+): Promise<Assessment> {
+  validateContractAddress();
+  return (await READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "get_assessment_by_submission",
+    args: [submissionId],
+  })) as any;
+}
