@@ -362,7 +362,7 @@ export default function App() {
     <div className="min-h-screen bg-background text-primary font-sans selection:bg-selection-bg selection:text-selection-text">
       {/* Header */}
       <header className="border-b border-border">
-        <div className="max-w-3xl mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="w-full px-6 py-5 flex items-center justify-between">
           <div className="cursor-pointer group" onClick={reset}>
             <h1 className="text-2xl font-bold tracking-tight text-primary group-hover:text-accent transition-colors">
               QUALIS
@@ -385,12 +385,10 @@ export default function App() {
             </button>
             {address ? (
               <div className="relative group">
-                <div className="flex items-center gap-2 text-sm cursor-pointer py-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-accent" />
-                  <span className="text-secondary">Connected:</span>
-                  <span className="font-mono text-primary">
-                    {truncateAddress(address)}
-                  </span>
+                <div className="flex items-center gap-1.5 text-sm cursor-pointer py-1 text-primary font-medium">
+                  <span>Wallet</span>
+                  <span className="text-muted">·</span>
+                  <span className="font-mono">{truncateAddress(address)}</span>
                 </div>
                 <div className="absolute right-0 top-full pt-1 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                   <div className="bg-surface border border-border rounded shadow-xl p-2">
@@ -417,22 +415,13 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="relative group">
-                <div className="flex items-center gap-2 text-sm text-muted cursor-pointer py-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-muted" />
-                  Disconnected
-                </div>
-                <div className="absolute right-0 top-full pt-1 w-36 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                  <div className="bg-surface border border-border rounded shadow-xl p-2">
-                    <button
-                      onClick={connectWallet}
-                      className="w-full text-left px-3 py-2 text-xs text-accent hover:bg-surface-secondary rounded transition-colors"
-                    >
-                      Connect Wallet
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <button
+                onClick={connectWallet}
+                disabled={state.phase === "connecting"}
+                className="text-sm cursor-pointer py-1 text-muted hover:text-primary transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {state.phase === "connecting" ? "Connecting..." : "Connect Wallet"}
+              </button>
             )}
           </div>
         </div>
@@ -456,23 +445,7 @@ export default function App() {
           </p>
         </section>
 
-        {/* Wallet action */}
-        {!address && (
-          <section className="mb-12 text-center">
-            <button
-              onClick={connectWallet}
-              disabled={state.phase === "connecting"}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-button text-button-text font-semibold rounded hover:bg-button-hover transition-colors disabled:opacity-50"
-            >
-              {state.phase === "connecting"
-                ? "Connecting..."
-                : "Connect Wallet"}
-            </button>
-            <p className="text-xs text-muted mt-3">
-              Requires an injected browser wallet (MetaMask, Rabby, etc.)
-            </p>
-          </section>
-        )}
+
 
         {/* Wrong network */}
         {state.phase === "wrong_network" && (
@@ -845,9 +818,28 @@ export default function App() {
         )}
 
         {/* Footer */}
-        <footer className="mt-16 pt-6 border-t border-border text-center">
-          <p className="text-xs text-muted">
-            Contract: {truncateAddress(CONTRACT_ADDRESS)} · Studionet
+        <footer className="fixed bottom-4 left-6 right-6 flex justify-between items-end z-50 pointer-events-none">
+          <p className="text-xs text-muted pointer-events-auto">
+            <a
+              href="https://x.com/idnurey"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-primary transition-colors cursor-pointer"
+            >
+              Built by Archers
+            </a>
+          </p>
+          <p className="text-xs text-muted pointer-events-auto text-right">
+            Contract:{" "}
+            <a
+              href={`https://explorer.studio.genlayer.com/contract/${CONTRACT_ADDRESS}`}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-primary transition-colors cursor-pointer"
+            >
+              {truncateAddress(CONTRACT_ADDRESS)}
+            </a>{" "}
+            · Studionet
           </p>
         </footer>
       </main>
