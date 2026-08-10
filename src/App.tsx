@@ -66,6 +66,26 @@ export default function App() {
   const [provider, setProvider] = useState<unknown | null>(null);
   const [state, setState] = useState<AppState>({ phase: "disconnected" });
 
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      const saved = localStorage.getItem("qualis-theme");
+      if (saved === "light" || saved === "dark") return saved;
+      if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+    } catch (e) {}
+    return "light";
+  });
+
+  React.useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === "dark") {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+    localStorage.setItem("qualis-theme", theme);
+  }, [theme]);
+
+
   // Form fields
   const [evalTitle, setEvalTitle] = useState("");
   const [evalDesc, setEvalDesc] = useState("");
@@ -329,42 +349,90 @@ export default function App() {
   }, []);
 
   const reset = useCallback(() => {
-    setState({ phase: "ready" });
+    setState((s) => ({ ...s, phase: address ? "ready" : "disconnected", errorMessage: undefined, errorAction: undefined, evaluationId: undefined, evaluation: undefined, submissionId: undefined, submission: undefined, assessment: undefined, invariantMessage: undefined, txHash: undefined }));
     setEvalTitle("");
     setEvalDesc("");
     setWorkContent("");
-  }, []);
+  }, [address]);
 
   // --------------------------------------------------------------
   // Render
   // --------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-200 font-sans selection:bg-emerald-900 selection:text-emerald-100">
+    <div className="min-h-screen bg-background text-primary font-sans selection:bg-selection-bg selection:text-selection-text">
       {/* Header */}
-      <header className="border-b border-neutral-800">
+      <header className="border-b border-border">
         <div className="max-w-3xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+          <div className="cursor-pointer group" onClick={reset}>
+            <h1 className="text-2xl font-bold tracking-tight text-primary group-hover:text-accent transition-colors">
               QUALIS
             </h1>
-            <p className="text-xs text-neutral-500 mt-0.5 tracking-wide uppercase">
+            <p className="text-xs text-muted mt-0.5 tracking-wide uppercase">
               GenLayer-native Evaluation Protocol
             </p>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+              className="p-2 text-muted hover:text-primary transition-colors focus:outline-none"
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            >
+              {theme === 'dark' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              )}
+            </button>
             {address ? (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-neutral-400">Connected:</span>
-                <span className="font-mono text-neutral-200">
-                  {truncateAddress(address)}
-                </span>
+              <div className="relative group">
+                <div className="flex items-center gap-2 text-sm cursor-pointer py-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-accent" />
+                  <span className="text-secondary">Connected:</span>
+                  <span className="font-mono text-primary">
+                    {truncateAddress(address)}
+                  </span>
+                </div>
+                <div className="absolute right-0 top-full pt-1 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                  <div className="bg-surface border border-border rounded shadow-xl p-2">
+                    <div className="px-3 py-2 text-xs text-muted font-mono break-all mb-1">
+                      {address}
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(address)}
+                      className="w-full text-left px-3 py-2 text-xs text-primary hover:bg-surface-secondary rounded transition-colors"
+                    >
+                      Copy Address
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAddress(null);
+                        setProvider(null);
+                        setState({ phase: "disconnected" });
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs text-error hover:bg-surface-secondary rounded mt-1 transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : (
-              <span className="text-sm text-neutral-500 flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-neutral-600" />
-                Disconnected
-              </span>
+              <div className="relative group">
+                <div className="flex items-center gap-2 text-sm text-muted cursor-pointer py-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-muted" />
+                  Disconnected
+                </div>
+                <div className="absolute right-0 top-full pt-1 w-36 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                  <div className="bg-surface border border-border rounded shadow-xl p-2">
+                    <button
+                      onClick={connectWallet}
+                      className="w-full text-left px-3 py-2 text-xs text-accent hover:bg-surface-secondary rounded transition-colors"
+                    >
+                      Connect Wallet
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -373,17 +441,17 @@ export default function App() {
       <main className="max-w-3xl mx-auto px-6 py-10">
         {/* Protocol explanation */}
         <section className="mb-12">
-          <p className="text-neutral-400 leading-relaxed">
-            Qualis demonstrates why GenLayer is necessary. A user creates an{" "}
-            <strong className="text-neutral-200">Evaluation</strong> with
+          <p className="text-secondary leading-relaxed">
+            Qualis demonstrates why GenLayer matters. A user creates an{" "}
+            <strong className="text-primary">Evaluation</strong> with
             criteria. A user submits{" "}
-            <strong className="text-neutral-200">Work</strong> against it.
-            GenLayer invokes{" "}
-            <strong className="text-neutral-200">
+            <strong className="text-primary">Work</strong> against it.
+            GenLayer performs{" "}
+            <strong className="text-primary">
               non-deterministic execution
             </strong>{" "}
-            to evaluate the Work. Validator consensus makes the{" "}
-            <strong className="text-neutral-200">Assessment</strong> canonical
+            to evaluate the Work. Validator consensus makes the resulting{" "}
+            <strong className="text-primary">Assessment</strong> canonical
             protocol state.
           </p>
         </section>
@@ -394,13 +462,13 @@ export default function App() {
             <button
               onClick={connectWallet}
               disabled={state.phase === "connecting"}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-neutral-950 font-semibold rounded hover:bg-neutral-200 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-button text-button-text font-semibold rounded hover:bg-button-hover transition-colors disabled:opacity-50"
             >
               {state.phase === "connecting"
                 ? "Connecting..."
                 : "Connect Wallet"}
             </button>
-            <p className="text-xs text-neutral-600 mt-3">
+            <p className="text-xs text-muted mt-3">
               Requires an injected browser wallet (MetaMask, Rabby, etc.)
             </p>
           </section>
@@ -408,16 +476,16 @@ export default function App() {
 
         {/* Wrong network */}
         {state.phase === "wrong_network" && (
-          <section className="mb-12 p-4 border border-amber-800 bg-amber-950/30 rounded">
-            <h3 className="text-amber-400 font-semibold mb-2">
+          <section className="mb-12 p-4 border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 rounded">
+            <h3 className="text-amber-700 dark:text-amber-700 dark:text-amber-400 font-semibold mb-2">
               Wrong Network
             </h3>
-            <p className="text-amber-200/80 text-sm whitespace-pre-line">
+            <p className="text-amber-700 dark:text-amber-200/80 text-sm whitespace-pre-line">
               {state.errorMessage}
             </p>
             <button
               onClick={connectWallet}
-              className="mt-3 text-xs px-3 py-1.5 border border-amber-700 text-amber-400 rounded hover:bg-amber-900/50"
+              className="mt-3 text-xs px-3 py-1.5 border border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-700 dark:text-amber-400 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50"
             >
               Retry Connection
             </button>
@@ -427,7 +495,7 @@ export default function App() {
         {/* Error state */}
         {state.phase === "error" && (
           <section className="mb-12 p-4 border border-red-800 bg-red-950/30 rounded">
-            <h3 className="text-red-400 font-semibold mb-1">Transaction Failed</h3>
+            <h3 className="text-error font-semibold mb-1">Transaction Failed</h3>
             <p className="text-red-200/80 text-sm">{state.errorMessage}</p>
             <p className="text-red-200/50 text-xs mt-1">
               Action: {state.errorAction}
@@ -435,7 +503,7 @@ export default function App() {
             <div className="mt-3 flex gap-2">
               <button
                 onClick={reset}
-                className="text-xs px-3 py-1.5 border border-red-700 text-red-400 rounded hover:bg-red-900/50"
+                className="text-xs px-3 py-1.5 border border-red-700 text-error rounded hover:bg-red-900/50"
               >
                 Reset
               </button>
@@ -470,7 +538,7 @@ export default function App() {
             {state.evaluationId === undefined ? (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-neutral-500 mb-1 uppercase tracking-wider">
+                  <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wider">
                     Title
                   </label>
                   <input
@@ -478,11 +546,11 @@ export default function App() {
                     value={evalTitle}
                     onChange={(e) => setEvalTitle(e.target.value)}
                     placeholder="e.g., Best Technical Blog Post"
-                    className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded text-sm text-neutral-200 placeholder:text-neutral-700 focus:outline-none focus:border-neutral-600"
+                    className="w-full px-3 py-2 bg-surface border border-border rounded text-sm text-primary placeholder:text-muted focus:outline-none focus:border-secondary"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-neutral-500 mb-1 uppercase tracking-wider">
+                  <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wider">
                     Description / Criteria
                   </label>
                   <textarea
@@ -490,7 +558,7 @@ export default function App() {
                     onChange={(e) => setEvalDesc(e.target.value)}
                     placeholder="Describe what makes work acceptable..."
                     rows={3}
-                    className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded text-sm text-neutral-200 placeholder:text-neutral-700 focus:outline-none focus:border-neutral-600 resize-none"
+                    className="w-full px-3 py-2 bg-surface border border-border rounded text-sm text-primary placeholder:text-muted focus:outline-none focus:border-secondary resize-none"
                   />
                 </div>
                 <button
@@ -500,7 +568,7 @@ export default function App() {
                     !evalTitle.trim() ||
                     !evalDesc.trim()
                   }
-                  className="px-4 py-2 bg-neutral-200 text-neutral-950 text-sm font-semibold rounded hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-button text-button-text text-sm font-semibold rounded hover:bg-button-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {state.phase === "creating_evaluation"
                     ? "Waiting for consensus..."
@@ -510,30 +578,30 @@ export default function App() {
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-emerald-500 font-mono">✓</span>
-                  <span className="text-neutral-300">
+                  <span className="text-accent font-mono">✓</span>
+                  <span className="text-primary">
                     Evaluation #{formatId(state.evaluationId)}
                   </span>
                 </div>
                 {state.evaluation && (
                   <div className="pl-5 space-y-1">
-                    <p className="text-sm text-neutral-200 font-medium">
+                    <p className="text-sm text-primary font-medium">
                       {state.evaluation.title}
                     </p>
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-muted">
                       {state.evaluation.description}
                     </p>
                   </div>
                 )}
                 {state.txHash && (
-                  <p className="pl-5 text-xs text-neutral-600 font-mono">
+                  <p className="pl-5 text-xs text-muted font-mono">
                     Tx: {truncateAddress(state.txHash)}
                   </p>
                 )}
                 {state.phase === "evaluation_created" && (
                   <button
                     onClick={goToSubmit}
-                    className="ml-5 mt-2 text-xs px-3 py-1.5 border border-neutral-700 text-neutral-300 rounded hover:bg-neutral-800"
+                    className="ml-5 mt-2 text-xs px-3 py-1.5 border border-border text-primary rounded hover:bg-surface-secondary"
                   >
                     Proceed to Submit Work →
                   </button>
@@ -566,11 +634,11 @@ export default function App() {
           >
             {state.submissionId === undefined ? (
               <div className="space-y-3">
-                <div className="text-xs text-neutral-500">
+                <div className="text-xs text-muted">
                   Evaluation: #{formatId(state.evaluationId!)}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-neutral-500 mb-1 uppercase tracking-wider">
+                  <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wider">
                     Submission Content
                   </label>
                   <textarea
@@ -578,7 +646,7 @@ export default function App() {
                     onChange={(e) => setWorkContent(e.target.value)}
                     placeholder="Paste your work here..."
                     rows={4}
-                    className="w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded text-sm text-neutral-200 placeholder:text-neutral-700 focus:outline-none focus:border-neutral-600 resize-none"
+                    className="w-full px-3 py-2 bg-surface border border-border rounded text-sm text-primary placeholder:text-muted focus:outline-none focus:border-secondary resize-none"
                   />
                 </div>
                 <button
@@ -586,7 +654,7 @@ export default function App() {
                   disabled={
                     state.phase === "submitting_work" || !workContent.trim()
                   }
-                  className="px-4 py-2 bg-neutral-200 text-neutral-950 text-sm font-semibold rounded hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-button text-button-text text-sm font-semibold rounded hover:bg-button-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {state.phase === "submitting_work"
                     ? "Waiting for consensus..."
@@ -596,30 +664,30 @@ export default function App() {
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-emerald-500 font-mono">✓</span>
-                  <span className="text-neutral-300">
+                  <span className="text-accent font-mono">✓</span>
+                  <span className="text-primary">
                     Submission #{formatId(state.submissionId)}
                   </span>
                 </div>
                 {state.submission && (
                   <div className="pl-5">
-                    <p className="text-xs text-neutral-500 mb-1">
+                    <p className="text-xs text-muted mb-1">
                       Evaluation #{formatId(state.submission.evaluation_id)}
                     </p>
-                    <p className="text-sm text-neutral-300 bg-neutral-900/50 p-2 rounded border border-neutral-800/50 line-clamp-3">
+                    <p className="text-sm text-primary bg-surface/50 p-2 rounded border border-border/50 line-clamp-3">
                       {state.submission.content}
                     </p>
                   </div>
                 )}
                 {state.txHash && (
-                  <p className="pl-5 text-xs text-neutral-600 font-mono">
+                  <p className="pl-5 text-xs text-muted font-mono">
                     Tx: {truncateAddress(state.txHash)}
                   </p>
                 )}
                 {state.phase === "work_submitted" && (
                   <button
                     onClick={goToAssess}
-                    className="ml-5 mt-2 text-xs px-3 py-1.5 border border-neutral-700 text-neutral-300 rounded hover:bg-neutral-800"
+                    className="ml-5 mt-2 text-xs px-3 py-1.5 border border-border text-primary rounded hover:bg-surface-secondary"
                   >
                     Proceed to Assessment →
                   </button>
@@ -649,22 +717,23 @@ export default function App() {
           >
             {state.assessment === undefined ? (
               <div className="space-y-3">
-                <p className="text-sm text-neutral-400 leading-relaxed">
+                <p className="text-sm text-secondary leading-relaxed">
                   This invokes GenLayer{" "}
-                  <strong className="text-neutral-200">
+                  <strong className="text-primary">
                     non-deterministic execution
                   </strong>
-                  . A leader validator evaluates the work against the criteria
-                  using an LLM. Other validators independently verify the
-                  leader&apos;s assessment. Consensus makes the result canonical.
+                  . GenLayer performs non-deterministic execution.
+                  A leader validator evaluates the Work against the Evaluation criteria.
+                  Validator consensus makes the Assessment canonical protocol state.
+
                 </p>
-                <div className="text-xs text-neutral-500">
+                <div className="text-xs text-muted">
                   Submission: #{formatId(state.submissionId!)}
                 </div>
                 <button
                   onClick={handleAssess}
                   disabled={state.phase === "assessing"}
-                  className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded hover:bg-emerald-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-accent text-white text-sm font-semibold rounded hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {state.phase === "assessing"
                     ? "Executing non-deterministic evaluation..."
@@ -674,16 +743,16 @@ export default function App() {
             ) : (
               <div className="space-y-4">
                 {/* Canonical Protocol State */}
-                <div className="p-4 border border-emerald-900/50 bg-emerald-950/20 rounded">
-                  <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-3">
+                <div className="p-4 border border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20 rounded">
+                  <h4 className="text-xs font-bold text-accent uppercase tracking-wider mb-3">
                     Canonical Protocol State
                   </h4>
                   <div className="flex items-center gap-3 mb-3">
                     <span
                       className={`text-lg font-bold ${
                         state.assessment!.decision === "APPROVED"
-                          ? "text-emerald-400"
-                          : "text-red-400"
+                          ? "text-accent"
+                          : "text-error"
                       }`}
                     >
                       {state.assessment!.decision}
@@ -691,24 +760,24 @@ export default function App() {
                   </div>
                   <div className="space-y-2">
                     <div>
-                      <span className="text-xs text-neutral-500 uppercase tracking-wider">
+                      <span className="text-xs text-muted uppercase tracking-wider">
                         Reasoning
                       </span>
-                      <p className="text-sm text-neutral-300 mt-1 leading-relaxed">
+                      <p className="text-sm text-primary mt-1 leading-relaxed">
                         {state.assessment!.reasoning}
                       </p>
                     </div>
                     <div>
-                      <span className="text-xs text-neutral-500 uppercase tracking-wider">
+                      <span className="text-xs text-muted uppercase tracking-wider">
                         Submission Reference
                       </span>
-                      <p className="text-sm text-neutral-300 mt-1 font-mono">
+                      <p className="text-sm text-primary mt-1 font-mono">
                         #{formatId(state.assessment!.submission_id)}
                       </p>
                     </div>
                   </div>
                   {state.txHash && (
-                    <p className="mt-3 text-xs text-neutral-600 font-mono">
+                    <p className="mt-3 text-xs text-muted font-mono">
                       Consensus Tx: {truncateAddress(state.txHash)}
                     </p>
                   )}
@@ -720,11 +789,11 @@ export default function App() {
 
         {/* PROTOCOL INTEGRITY */}
         {state.assessment !== undefined && (
-          <section className="mt-8 pt-8 border-t border-neutral-800">
-            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">
+          <section className="mt-8 pt-8 border-t border-border">
+            <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-4">
               Protocol Integrity
             </h3>
-            <p className="text-sm text-neutral-400 mb-4">
+            <p className="text-sm text-secondary mb-4">
               Each Submission can have only one canonical Assessment. This
               invariant is enforced by the Intelligent Contract itself, not by
               frontend logic.
@@ -737,7 +806,7 @@ export default function App() {
               <button
                 onClick={handleVerifyInvariant}
                 disabled={state.phase === "verifying_invariant"}
-                className="px-4 py-2 border border-neutral-700 text-neutral-300 text-sm rounded hover:bg-neutral-800 transition-colors disabled:opacity-40"
+                className="px-4 py-2 border border-border text-primary text-sm rounded hover:bg-surface-secondary transition-colors disabled:opacity-40"
               >
                 {state.phase === "verifying_invariant"
                   ? "Verifying..."
@@ -746,8 +815,8 @@ export default function App() {
             )}
 
             {state.phase === "invariant_verified" && (
-              <div className="mt-3 p-3 border border-emerald-900/50 bg-emerald-950/20 rounded">
-                <p className="text-sm text-emerald-400">
+              <div className="mt-3 p-3 border border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20 rounded">
+                <p className="text-sm text-accent">
                   {state.invariantMessage}
                 </p>
               </div>
@@ -755,7 +824,7 @@ export default function App() {
 
             {state.phase === "invariant_rejected" && (
               <div className="mt-3 p-3 border border-red-900/50 bg-red-950/20 rounded">
-                <p className="text-sm text-red-400">
+                <p className="text-sm text-error">
                   {state.invariantMessage}
                 </p>
               </div>
@@ -768,7 +837,7 @@ export default function App() {
           <div className="mt-10 text-center">
             <button
               onClick={reset}
-              className="text-xs text-neutral-500 hover:text-neutral-300 underline underline-offset-4"
+              className="text-xs text-muted hover:text-primary underline underline-offset-4"
             >
               Start New Lifecycle
             </button>
@@ -776,8 +845,8 @@ export default function App() {
         )}
 
         {/* Footer */}
-        <footer className="mt-16 pt-6 border-t border-neutral-900 text-center">
-          <p className="text-xs text-neutral-700">
+        <footer className="mt-16 pt-6 border-t border-border text-center">
+          <p className="text-xs text-muted">
             Contract: {truncateAddress(CONTRACT_ADDRESS)} · Studionet
           </p>
         </footer>
@@ -806,10 +875,10 @@ function StepSection({
         <span
           className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
             status === "done"
-              ? "bg-emerald-900 text-emerald-400"
+              ? "bg-selection-bg text-accent"
               : status === "loading"
-              ? "bg-amber-900 text-amber-400"
-              : "bg-neutral-800 text-neutral-400"
+              ? "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-700 dark:text-amber-400"
+              : "bg-surface-secondary text-secondary"
           }`}
         >
           {status === "done" ? "✓" : number}
@@ -817,16 +886,16 @@ function StepSection({
         <h2
           className={`text-sm font-semibold uppercase tracking-wider ${
             status === "done"
-              ? "text-emerald-400"
+              ? "text-accent"
               : status === "loading"
-              ? "text-amber-400"
-              : "text-neutral-300"
+              ? "text-amber-700 dark:text-amber-400"
+              : "text-primary"
           }`}
         >
           {title}
         </h2>
         {status === "loading" && (
-          <span className="text-xs text-amber-500 animate-pulse">
+          <span className="text-xs text-amber-600 dark:text-amber-500 animate-pulse">
             Processing...
           </span>
         )}

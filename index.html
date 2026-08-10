@@ -7,7 +7,17 @@
     <meta
       name="description"
       content="Qualis is a GenLayer-native evaluation protocol demonstrating non-deterministic execution and validator consensus."
-    />
+    />    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('qualis-theme');
+          var dark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
