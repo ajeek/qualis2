@@ -1,0 +1,30 @@
+--- src/App.tsx
++++ src/App.tsx
+@@ -108,21 +108,27 @@
+       
+       isFetchingEvaluations.current = true;
+       try {
++        console.log("loadEvaluations: Starting fetch flow");
+         setEvaluationsLoading(true);
++        console.log("loadEvaluations: Calling getStats");
+         const stats = await getStats();
++        console.log("loadEvaluations: getStats succeeded");
+         const evals: { id: bigint; evaluation: Evaluation }[] = [];
+         const total = Number(stats.total_evaluations);
+         const minIndex = Math.max(0, total - 5);
+         for (let i = total - 1; i >= minIndex; i--) {
+           if (evalCache.current.has(i)) {
++            console.log("loadEvaluations: Using cache for", i);
+             evals.push({ id: BigInt(i), evaluation: evalCache.current.get(i)! });
+           } else {
++            console.log("loadEvaluations: Calling getEvaluation", i);
+             const evalData = await getEvaluation(BigInt(i));
+             evalCache.current.set(i, evalData);
+             evals.push({ id: BigInt(i), evaluation: evalData });
+           }
+         }
+         if (mounted) {
++          console.log("loadEvaluations: Setting evaluations (mounted=true)");
+           setEvaluations(evals);
+         }
+       } catch (err) {

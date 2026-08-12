@@ -1,0 +1,26 @@
+--- src/main.tsx
++++ src/main.tsx
+@@ -4,6 +4,31 @@
+ import "./index.css";
+ 
++const originalFetch = window.fetch;
++window.fetch = async (...args) => {
++  const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
++  const opts = args[1];
++  if (url && url.includes("studio.genlayer.com")) {
++    const reqBody = opts && opts.body ? opts.body : null;
++    console.log("[FETCH_REQ]", url, opts?.method, reqBody);
++    try {
++      const res = await originalFetch(...args);
++      console.log("[FETCH_RES]", url, res.status);
++      return res;
++    } catch (err) {
++      console.log("[FETCH_ERR]", url, err);
++      throw err;
++    }
++  }
++  return originalFetch(...args);
++};
++
+ ReactDOM.createRoot(document.getElementById("root")!).render(
+   <React.StrictMode>

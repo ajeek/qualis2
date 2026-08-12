@@ -1,0 +1,44 @@
+--- src/App.tsx
++++ src/App.tsx
+@@ -102,6 +102,7 @@
+   React.useEffect(() => {
+     let mounted = true;
+     async function loadEvaluations() {
++      console.log("loadEvaluations invoked, phase:", state.phase);
+       if (state.phase !== "disconnected" && state.phase !== "ready") return;
+       if (isFetchingEvaluations.current) {
++        console.log("Early return due to isFetchingEvaluations");
+         return;
+       }
+       
+       isFetchingEvaluations.current = true;
+       try {
++        console.log("Calling getStats()");
+         setEvaluationsLoading(true);
+         const stats = await getStats();
+         const evals: { id: bigint; evaluation: Evaluation }[] = [];
+         const total = Number(stats.total_evaluations);
+         const minIndex = Math.max(0, total - 5);
+         for (let i = total - 1; i >= minIndex; i--) {
+           if (evalCache.current.has(i)) {
+             evals.push({ id: BigInt(i), evaluation: evalCache.current.get(i)! });
+           } else {
++            console.log("Calling getEvaluation(", i, ")");
+             const evalData = await getEvaluation(BigInt(i));
+             evalCache.current.set(i, evalData);
+             evals.push({ id: BigInt(i), evaluation: evalData });
+           }
+         }
+         if (mounted) {
+           setEvaluations(evals);
+         }
+       } catch (err) {
+         console.error("Failed to load evaluations:", err);
+       } finally {
+         isFetchingEvaluations.current = false;
+         if (mounted) setEvaluationsLoading(false);
+       }
+     }
+     loadEvaluations();
+     return () => { mounted = false; };
+   }, [state.phase]);

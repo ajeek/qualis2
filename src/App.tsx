@@ -7,6 +7,8 @@ import {
   submitWork,
   assessSubmission,
   verifyInvariant,
+  getStats,
+  getEvaluation,
   type Evaluation,
   type Submission,
   type Assessment,
@@ -90,6 +92,46 @@ export default function App() {
   const [evalTitle, setEvalTitle] = useState("");
   const [evalDesc, setEvalDesc] = useState("");
   const [workContent, setWorkContent] = useState("");
+
+  const [evaluations, setEvaluations] = useState<{ id: bigint; evaluation: Evaluation }[]>([]);
+  const [evaluationsLoading, setEvaluationsLoading] = useState(true);
+  const [isEvaluationsOpen, setIsEvaluationsOpen] = useState(false);
+  
+  const evalCache = React.useRef(new Map<number, Evaluation>());
+
+  React.useEffect(() => {
+    let mounted = true;
+    async function loadEvaluations() {
+      if (state.phase !== "disconnected" && state.phase !== "ready") return;
+      if (!isEvaluationsOpen) return;
+      
+      try {
+        setEvaluationsLoading(true);
+        const stats = await getStats();
+        const evals: { id: bigint; evaluation: Evaluation }[] = [];
+        const total = Number(stats.total_evaluations);
+        const minIndex = Math.max(0, total - 5);
+        for (let i = total - 1; i >= minIndex; i--) {
+          if (evalCache.current.has(i)) {
+            evals.push({ id: BigInt(i), evaluation: evalCache.current.get(i)! });
+          } else {
+            const evalData = await getEvaluation(BigInt(i));
+            evalCache.current.set(i, evalData);
+            evals.push({ id: BigInt(i), evaluation: evalData });
+          }
+        }
+        if (mounted) {
+          setEvaluations(evals);
+        }
+      } catch (err) {
+        if (mounted) console.warn("[QUALIS] Could not load evaluations (RPC might be offline or rate-limited).", err);
+      } finally {
+        if (mounted) setEvaluationsLoading(false);
+      }
+    }
+    loadEvaluations();
+    return () => { mounted = false; };
+  }, [state.phase, isEvaluationsOpen]);
 
   const setError = useCallback((message: string, action: string) => {
     console.error(`[QUALIS ERROR] ${action}:`, message);
@@ -428,21 +470,52 @@ export default function App() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-10">
-        {/* Protocol explanation */}
-        <section className="mb-12">
-          <p className="text-secondary leading-relaxed">
-            Qualis demonstrates why GenLayer matters. A user creates an{" "}
-            <strong className="text-primary">Evaluation</strong> with
-            criteria. A user submits{" "}
-            <strong className="text-primary">Work</strong> against it.
-            GenLayer performs{" "}
-            <strong className="text-primary">
-              non-deterministic execution
-            </strong>{" "}
-            to evaluate the Work. Validator consensus makes the resulting{" "}
-            <strong className="text-primary">Assessment</strong> canonical
-            protocol state.
+        {/* Hero Section */}
+        <section className="mb-16 mt-8 md:mt-12 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-primary mb-6">
+            Verifiable evaluation made canonical.
+          </h2>
+          <p className="text-secondary leading-relaxed max-w-2xl mx-auto md:text-lg">
+            Define criteria. Submit Work. GenLayer performs non-deterministic execution and validator consensus makes the resulting Assessment canonical protocol state.
           </p>
+          
+          <div className="mt-12 flex flex-col md:flex-row flex-wrap items-center justify-center gap-2 md:gap-3 text-xs font-medium text-muted">
+            <div className="px-3 md:px-4 py-2 border border-border rounded bg-surface">
+              Evaluation
+            </div>
+            
+            <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3">
+              <div className="text-border hidden md:block">→</div>
+              <div className="text-border md:hidden">↓</div>
+              <div className="px-3 md:px-4 py-2 border border-border rounded bg-surface">
+                Work
+              </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3">
+              <div className="text-border hidden md:block">→</div>
+              <div className="text-border md:hidden">↓</div>
+              <div className="px-3 md:px-4 py-2 border border-border rounded bg-surface">
+                Non-deterministic execution
+              </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3">
+              <div className="text-border hidden md:block">→</div>
+              <div className="text-border md:hidden">↓</div>
+              <div className="px-3 md:px-4 py-2 border border-border rounded bg-surface">
+                Validator consensus
+              </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row items-center gap-2 md:gap-3">
+              <div className="text-border hidden md:block">→</div>
+              <div className="text-border md:hidden">↓</div>
+              <div className="px-3 md:px-4 py-2 border border-border rounded bg-surface text-primary border-primary/30">
+                Canonical Assessment
+              </div>
+            </div>
+          </div>
         </section>
 
 
@@ -481,6 +554,50 @@ export default function App() {
                 Reset
               </button>
             </div>
+          </section>
+        )}
+
+        {/* MY EVALUATIONS */}
+        {(state.phase === "disconnected" || state.phase === "ready") && (
+          <section className="mb-12">
+            <button
+              onClick={() => setIsEvaluationsOpen(!isEvaluationsOpen)}
+              className="w-full flex items-center justify-between py-2 border-b border-border focus:outline-none"
+            >
+              <h3 className="text-sm font-semibold text-primary uppercase tracking-wider flex items-center gap-2">
+                My Evaluations <span className="text-xs text-muted normal-case font-normal">(Latest 5)</span>
+              </h3>
+              <span className="text-muted text-sm">
+                {isEvaluationsOpen ? "▲" : "▼"}
+              </span>
+            </button>
+            {isEvaluationsOpen && (
+              <div className="mt-6">
+                {evaluationsLoading ? (
+                  <p className="text-sm text-muted">Loading evaluations...</p>
+                ) : evaluations.length === 0 ? (
+                  <p className="text-sm text-muted">No evaluations yet.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {evaluations.map((e) => (
+                      <div key={e.id.toString()} className="p-5 bg-surface border border-border rounded flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <p className="text-xs text-muted mb-1 font-mono uppercase tracking-wider">Evaluation #{formatId(e.id)}</p>
+                          <p className="text-base font-medium text-primary mb-1">{e.evaluation.title}</p>
+                          <p className="text-sm text-secondary line-clamp-2">{e.evaluation.description}</p>
+                        </div>
+                        <button
+                          onClick={() => setState({ phase: "evaluation_created", evaluationId: e.id, evaluation: e.evaluation })}
+                          className="whitespace-nowrap text-sm px-4 py-2 border border-border text-primary rounded hover:bg-surface-secondary transition-colors"
+                        >
+                          View →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -549,35 +666,57 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-accent font-mono">✓</span>
-                  <span className="text-primary">
-                    Evaluation #{formatId(state.evaluationId)}
-                  </span>
-                </div>
-                {state.evaluation && (
-                  <div className="pl-5 space-y-1">
-                    <p className="text-sm text-primary font-medium">
-                      {state.evaluation.title}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {state.evaluation.description}
-                    </p>
+              <div className="space-y-4">
+                <div className="p-4 bg-surface border border-border rounded-md">
+                  <div className="flex items-center gap-2 mb-3 border-b border-border pb-2">
+                    <span className="text-accent font-mono">✓</span>
+                    <span className="text-sm font-medium text-primary uppercase tracking-wider">
+                      Canonical Evaluation #{formatId(state.evaluationId)}
+                    </span>
                   </div>
-                )}
-                {state.txHash && (
-                  <p className="pl-5 text-xs text-muted font-mono">
-                    Tx: {truncateAddress(state.txHash)}
-                  </p>
-                )}
+                  {state.evaluation ? (
+                    <div className="space-y-3">
+                      <div>
+                        <span className="block text-xs font-medium text-muted uppercase tracking-wider mb-1">Title</span>
+                        <p className="text-sm text-primary font-medium">
+                          {state.evaluation.title}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="block text-xs font-medium text-muted uppercase tracking-wider mb-1">Description / Criteria</span>
+                        <p className="text-sm text-secondary whitespace-pre-wrap">
+                          {state.evaluation.description}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded">
+                      <p className="text-sm text-red-500 font-medium">
+                        Error: Evaluation data could not be found.
+                      </p>
+                    </div>
+                  )}
+                  {state.txHash && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <p className="text-xs text-muted font-mono">
+                        Tx: {truncateAddress(state.txHash)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
                 {state.phase === "evaluation_created" && (
-                  <button
-                    onClick={goToSubmit}
-                    className="ml-5 mt-2 text-xs px-3 py-1.5 border border-border text-primary rounded hover:bg-surface-secondary"
-                  >
-                    Proceed to Submit Work →
-                  </button>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-4 border border-border rounded-md">
+                    <p className="text-sm text-muted">
+                      Ready to submit work against this evaluation?
+                    </p>
+                    <button
+                      onClick={goToSubmit}
+                      className="whitespace-nowrap text-sm px-4 py-2 bg-button text-button-text font-semibold rounded hover:bg-button-hover transition-colors"
+                    >
+                      Proceed to Submit Work →
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -696,8 +835,8 @@ export default function App() {
                     non-deterministic execution
                   </strong>
                   . GenLayer performs non-deterministic execution.
-                  A leader validator evaluates the Work against the Evaluation criteria.
-                  Validator consensus makes the Assessment canonical protocol state.
+                  A leader validator evaluates the submitted Work against the Evaluation criteria,
+                  and Validator consensus makes the resulting Assessment canonical protocol state.
 
                 </p>
                 <div className="text-xs text-muted">
@@ -802,19 +941,19 @@ export default function App() {
                 </p>
               </div>
             )}
-          </section>
-        )}
 
-        {/* Reset */}
-        {state.evaluationId !== undefined && (
-          <div className="mt-10 text-center">
-            <button
-              onClick={reset}
-              className="text-xs text-muted hover:text-primary underline underline-offset-4"
-            >
-              Start New Lifecycle
-            </button>
-          </div>
+            {/* Reset */}
+            {(state.phase === "invariant_verified" || state.phase === "invariant_rejected") && (
+              <div className="mt-10 text-center">
+                <button
+                  onClick={reset}
+                  className="text-xs text-muted hover:text-primary underline underline-offset-4"
+                >
+                  Start New Lifecycle
+                </button>
+              </div>
+            )}
+          </section>
         )}
 
         {/* Footer */}

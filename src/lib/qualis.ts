@@ -5,6 +5,28 @@ import {
   CONTRACT_ADDRESS,
 } from "./genlayer";
 
+
+// ------------------------------------------------------------------
+// RPC Retry Wrapper
+// ------------------------------------------------------------------
+const MAX_RETRIES = 3;
+const BASE_DELAY = 1000;
+
+async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promise<T> {
+  let attempt = 0;
+  while (attempt < retries) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      attempt++;
+      if (attempt >= retries) throw err;
+      console.warn(`[QUALIS RPC] Call failed (attempt ${attempt}/${retries}). Retrying in ${BASE_DELAY * Math.pow(2, attempt - 1)}ms... Error: ${err.message || err}`);
+      await new Promise((res) => setTimeout(res, BASE_DELAY * Math.pow(2, attempt - 1)));
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 // ------------------------------------------------------------------
 // Types (mirror contract return shapes)
 // ------------------------------------------------------------------
@@ -150,19 +172,19 @@ export async function createEvaluation(
   logTx("create_evaluation", address, CONTRACT_ADDRESS, txHash, receipt.status as string);
 
   // CONFIRM CANONICAL STATE
-  const stats = (await READ_CLIENT.readContract({
+  const stats = (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_stats",
     args: [],
-  })) as unknown as Stats;
+  }))) as unknown as Stats;
 
   const newId = BigInt(stats.total_evaluations) - BigInt(1);
 
-  const evaluation = (await READ_CLIENT.readContract({
+  const evaluation = (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_evaluation",
     args: [newId],
-  })) as unknown as Evaluation;
+  }))) as unknown as Evaluation;
 
   if (evaluation.title !== t || evaluation.description !== d) {
     throw new Error(
@@ -216,19 +238,19 @@ export async function submitWork(
 
   logTx("submit_work", address, CONTRACT_ADDRESS, txHash, receipt.status as string);
 
-  const stats = (await READ_CLIENT.readContract({
+  const stats = (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_stats",
     args: [],
-  })) as unknown as Stats;
+  }))) as unknown as Stats;
 
   const newId = BigInt(stats.total_submissions) - BigInt(1);
 
-  const submission = (await READ_CLIENT.readContract({
+  const submission = (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_submission",
     args: [newId],
-  })) as unknown as Submission;
+  }))) as unknown as Submission;
 
   if (BigInt(submission.evaluation_id) !== BigInt(evaluationId) || submission.content !== c) {
     throw new Error(
@@ -281,11 +303,11 @@ export async function assessSubmission(
   logTx("assess_submission", address, CONTRACT_ADDRESS, txHash, receipt.status as string);
 
   // Confirm canonical state via deterministic lookup
-  const assessment = (await READ_CLIENT.readContract({
+  const assessment = (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_assessment_by_submission",
     args: [submissionId],
-  })) as unknown as Assessment;
+  }))) as unknown as Assessment;
 
   if (BigInt(assessment.submission_id) !== BigInt(submissionId)) {
     throw new Error(
@@ -319,11 +341,11 @@ export async function verifyInvariant(
   validateContractAddress();
 
   // Pre-check: submission must already be assessed
-  const hasAssess = (await READ_CLIENT.readContract({
+  const hasAssess = (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "has_assessment",
     args: [submissionId],
-  })) as unknown as boolean;
+  }))) as unknown as boolean;
 
   if (!hasAssess) {
     return {
@@ -332,11 +354,11 @@ export async function verifyInvariant(
     };
   }
 
-  const statsBefore = (await READ_CLIENT.readContract({
+  const statsBefore = (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_stats",
     args: [],
-  })) as unknown as Stats;
+  }))) as unknown as Stats;
 
   const writeClient = createWriteClient(address as `0x${string}`, provider);
   await switchToStudionet(provider);
@@ -381,11 +403,11 @@ export async function verifyInvariant(
   logTx("verify_invariant", address, CONTRACT_ADDRESS, txHash, receipt.status as string);
 
   // Confirm that no new assessment was created
-  const statsAfter = (await READ_CLIENT.readContract({
+  const statsAfter = (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_stats",
     args: [],
-  })) as unknown as Stats;
+  }))) as unknown as Stats;
 
   if (statsAfter.total_assessments === statsBefore.total_assessments) {
     return {
@@ -410,38 +432,38 @@ export async function verifyInvariant(
 
 export async function getStats(): Promise<Stats> {
   validateContractAddress();
-  return (await READ_CLIENT.readContract({
+  return (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_stats",
     args: [],
-  })) as any;
+  }))) as any;
 }
 
 export async function getEvaluation(evaluationId: bigint): Promise<Evaluation> {
   validateContractAddress();
-  return (await READ_CLIENT.readContract({
+  return (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_evaluation",
     args: [evaluationId],
-  })) as any;
+  }))) as any;
 }
 
 export async function getSubmission(submissionId: bigint): Promise<Submission> {
   validateContractAddress();
-  return (await READ_CLIENT.readContract({
+  return (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_submission",
     args: [submissionId],
-  })) as any;
+  }))) as any;
 }
 
 export async function getAssessmentBySubmission(
   submissionId: bigint
 ): Promise<Assessment> {
   validateContractAddress();
-  return (await READ_CLIENT.readContract({
+  return (await withRetry(() => READ_CLIENT.readContract({
     address: CONTRACT_ADDRESS,
     functionName: "get_assessment_by_submission",
     args: [submissionId],
-  })) as any;
+  }))) as any;
 }
