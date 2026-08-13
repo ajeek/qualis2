@@ -9,9 +9,11 @@ import {
   verifyInvariant,
   getStats,
   getEvaluation,
+  getEvaluationsLifecycleStates,
   type Evaluation,
   type Submission,
   type Assessment,
+  type EvaluationLifecycle,
 } from "./lib/qualis";
 
 // ------------------------------------------------------------------
@@ -93,7 +95,7 @@ export default function App() {
   const [evalDesc, setEvalDesc] = useState("");
   const [workContent, setWorkContent] = useState("");
 
-  const [evaluations, setEvaluations] = useState<{ id: bigint; evaluation: Evaluation }[]>([]);
+  const [evaluations, setEvaluations] = useState<{ id: bigint; evaluation: Evaluation; lifecycle: EvaluationLifecycle }[]>([]);
   const [evaluationsLoading, setEvaluationsLoading] = useState(true);
   const [isEvaluationsOpen, setIsEvaluationsOpen] = useState(false);
   
@@ -108,18 +110,35 @@ export default function App() {
       try {
         setEvaluationsLoading(true);
         const stats = await getStats();
-        const evals: { id: bigint; evaluation: Evaluation }[] = [];
+        const evals: { id: bigint; evaluation: Evaluation; lifecycle: EvaluationLifecycle }[] = [];
         const total = Number(stats.total_evaluations);
+        const totalSubmissions = Number(stats.total_submissions);
         const minIndex = Math.max(0, total - 5);
+        
+        const evalIdsToLoad: bigint[] = [];
+        const loadedEvals: { id: bigint; evaluation: Evaluation }[] = [];
+        
         for (let i = total - 1; i >= minIndex; i--) {
+          const id = BigInt(i);
+          evalIdsToLoad.push(id);
           if (evalCache.current.has(i)) {
-            evals.push({ id: BigInt(i), evaluation: evalCache.current.get(i)! });
+            loadedEvals.push({ id, evaluation: evalCache.current.get(i)! });
           } else {
-            const evalData = await getEvaluation(BigInt(i));
+            const evalData = await getEvaluation(id);
             evalCache.current.set(i, evalData);
-            evals.push({ id: BigInt(i), evaluation: evalData });
+            loadedEvals.push({ id, evaluation: evalData });
           }
         }
+        
+        const lifecycles = await getEvaluationsLifecycleStates(evalIdsToLoad, totalSubmissions);
+        
+        for (const e of loadedEvals) {
+          evals.push({
+            ...e,
+            lifecycle: lifecycles.get(e.id)!
+          });
+        }
+
         if (mounted) {
           setEvaluations(evals);
         }
@@ -230,6 +249,21 @@ export default function App() {
   }, [setError]);
 
   // --------------------------------------------------------------
+  // My Evaluations -> View Lifecycle Resume
+  // --------------------------------------------------------------
+  const handleViewEvaluation = useCallback((e: { id: bigint; evaluation: Evaluation; lifecycle: EvaluationLifecycle }) => {
+    setState({
+      phase: e.lifecycle.phase,
+      evaluationId: e.id,
+      evaluation: e.evaluation,
+      submissionId: e.lifecycle.submissionId,
+      submission: e.lifecycle.submission,
+      assessment: e.lifecycle.assessment,
+    });
+    setIsEvaluationsOpen(false);
+  }, []);
+
+  // --------------------------------------------------------------
   // Step 1: Create Evaluation
   // --------------------------------------------------------------
   const handleCreateEvaluation = useCallback(async () => {
@@ -288,6 +322,7 @@ export default function App() {
       setState({
         phase: "work_submitted",
         evaluationId: state.evaluationId,
+        evaluation: state.evaluation,
         submissionId: result.submissionId,
         submission: result.submission,
         txHash: result.txHash,
@@ -579,21 +614,40 @@ export default function App() {
                   <p className="text-sm text-muted">No evaluations yet.</p>
                 ) : (
                   <div className="space-y-4">
-                    {evaluations.map((e) => (
-                      <div key={e.id.toString()} className="p-5 bg-surface border border-border rounded flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                          <p className="text-xs text-muted mb-1 font-mono uppercase tracking-wider">Evaluation #{formatId(e.id)}</p>
-                          <p className="text-base font-medium text-primary mb-1">{e.evaluation.title}</p>
-                          <p className="text-sm text-secondary line-clamp-2">{e.evaluation.description}</p>
+                    {evaluations.map((e) => {
+                      const phase = e.lifecycle.phase;
+                      let statusLabel = "Evaluation Created";
+                      let actionLabel = "Submit Work →";
+                      
+                      if (phase === "work_submitted") {
+                        statusLabel = "Work Submitted";
+                        actionLabel = "Continue Assessment →";
+                      } else if (phase === "assessment_finalized") {
+                        statusLabel = "Canonical Result";
+                        actionLabel = "View Result →";
+                      }
+
+                      return (
+                        <div key={e.id.toString()} className="p-5 bg-surface border border-border rounded flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-xs text-muted font-mono uppercase tracking-wider">Evaluation #{formatId(e.id)}</p>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-surface-secondary text-primary border border-border uppercase tracking-widest">
+                                {statusLabel}
+                              </span>
+                            </div>
+                            <p className="text-base font-medium text-primary mb-1">{e.evaluation.title}</p>
+                            <p className="text-sm text-secondary line-clamp-2">{e.evaluation.description}</p>
+                          </div>
+                          <button
+                            onClick={() => handleViewEvaluation(e)}
+                            className="whitespace-nowrap text-sm px-4 py-2 border border-border text-primary rounded hover:bg-surface-secondary transition-colors"
+                          >
+                            {actionLabel}
+                          </button>
                         </div>
-                        <button
-                          onClick={() => setState({ phase: "evaluation_created", evaluationId: e.id, evaluation: e.evaluation })}
-                          className="whitespace-nowrap text-sm px-4 py-2 border border-border text-primary rounded hover:bg-surface-secondary transition-colors"
-                        >
-                          View →
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

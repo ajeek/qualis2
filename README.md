@@ -1,11 +1,10 @@
-# Qualis
+# Qualis — GenLayer-Native Evaluation Protocol
 
-### Verifiable evaluation made canonical.
+Qualis demonstrates why GenLayer is necessary. A user creates an **Evaluation** with criteria. A user submits **Work** against it. GenLayer invokes **non-deterministic execution** to evaluate the Work. Validator consensus makes the **Assessment** canonical protocol state.
 
-Define criteria. Submit Work. GenLayer performs non-deterministic execution and validator consensus makes the resulting Assessment canonical protocol state.
-
-```text
+```
 Evaluation → Work → Assessment → Canonical Protocol State
+```
 
 ---
 

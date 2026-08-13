@@ -52,6 +52,13 @@ export interface Stats {
   total_assessments: bigint;
 }
 
+export interface EvaluationLifecycle {
+  phase: "evaluation_created" | "work_submitted" | "assessment_finalized";
+  submissionId?: bigint;
+  submission?: Submission;
+  assessment?: Assessment;
+}
+
 // ------------------------------------------------------------------
 // Validation helpers
 // ------------------------------------------------------------------
@@ -457,6 +464,17 @@ export async function getSubmission(submissionId: bigint): Promise<Submission> {
   }))) as any;
 }
 
+export async function hasAssessment(
+  submissionId: bigint
+): Promise<boolean> {
+  validateContractAddress();
+  return (await withRetry(() => READ_CLIENT.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: "has_assessment",
+    args: [submissionId],
+  }))) as unknown as boolean;
+}
+
 export async function getAssessmentBySubmission(
   submissionId: bigint
 ): Promise<Assessment> {
@@ -466,4 +484,47 @@ export async function getAssessmentBySubmission(
     functionName: "get_assessment_by_submission",
     args: [submissionId],
   }))) as any;
+}
+
+export async function getEvaluationsLifecycleStates(
+  evaluationIds: bigint[],
+  totalSubmissions: number
+): Promise<Map<bigint, EvaluationLifecycle>> {
+  const result = new Map<bigint, EvaluationLifecycle>();
+
+  // initialize all to evaluation_created
+  for (const id of evaluationIds) {
+    result.set(id, { phase: "evaluation_created" });
+  }
+
+  const idsToFind = new Set(evaluationIds);
+
+  for (let i = totalSubmissions - 1; i >= 0; i--) {
+    if (idsToFind.size === 0) break;
+    
+    const subId = BigInt(i);
+    const sub = await getSubmission(subId);
+    
+    if (idsToFind.has(sub.evaluation_id)) {
+      const isAssessed = await hasAssessment(subId);
+      if (isAssessed) {
+        const assessment = await getAssessmentBySubmission(subId);
+        result.set(sub.evaluation_id, {
+          phase: "assessment_finalized",
+          submissionId: subId,
+          submission: sub,
+          assessment
+        });
+      } else {
+        result.set(sub.evaluation_id, {
+          phase: "work_submitted",
+          submissionId: subId,
+          submission: sub
+        });
+      }
+      idsToFind.delete(sub.evaluation_id);
+    }
+  }
+
+  return result;
 }
