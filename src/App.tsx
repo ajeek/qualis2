@@ -48,7 +48,9 @@ interface AppState {
   submission?: Submission;
   assessment?: Assessment;
   invariantMessage?: string;
-  txHash?: string;
+  evaluationTxHash?: string;
+  submissionTxHash?: string;
+  assessmentTxHash?: string;
 }
 
 // ------------------------------------------------------------------
@@ -281,12 +283,13 @@ export default function App() {
         evalTitle,
         evalDesc
       );
-      setState({
+      setState((s) => ({
+        ...s,
         phase: "evaluation_created",
         evaluationId: result.evaluationId,
         evaluation: result.evaluation,
-        txHash: result.txHash,
-      });
+        evaluationTxHash: result.txHash,
+      }));
       setEvalTitle("");
       setEvalDesc("");
     } catch (err) {
@@ -319,14 +322,15 @@ export default function App() {
         state.evaluationId,
         workContent
       );
-      setState({
+      setState((s) => ({
+        ...s,
         phase: "work_submitted",
         evaluationId: state.evaluationId,
         evaluation: state.evaluation,
         submissionId: result.submissionId,
         submission: result.submission,
-        txHash: result.txHash,
-      });
+        submissionTxHash: result.txHash,
+      }));
       setWorkContent("");
     } catch (err) {
       setError(
@@ -357,13 +361,14 @@ export default function App() {
         provider,
         state.submissionId
       );
-      setState({
+      setState((s) => ({
+        ...s,
         phase: "assessment_finalized",
         evaluationId: state.evaluationId,
         submissionId: state.submissionId,
         assessment: result.assessment,
-        txHash: result.txHash,
-      });
+        assessmentTxHash: result.txHash,
+      }));
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to generate assessment",
@@ -394,17 +399,17 @@ export default function App() {
         state.submissionId
       );
       if (result.verified) {
-        setState({
+        setState((s) => ({
+          ...s,
           phase: "invariant_verified",
-          submissionId: state.submissionId,
           invariantMessage: result.message,
-        });
+        }));
       } else {
-        setState({
+        setState((s) => ({
+          ...s,
           phase: "invariant_rejected",
-          submissionId: state.submissionId,
           invariantMessage: result.message,
-        });
+        }));
       }
     } catch (err) {
       setError(
@@ -426,7 +431,7 @@ export default function App() {
   }, []);
 
   const reset = useCallback(() => {
-    setState((s) => ({ ...s, phase: address ? "ready" : "disconnected", errorMessage: undefined, errorAction: undefined, evaluationId: undefined, evaluation: undefined, submissionId: undefined, submission: undefined, assessment: undefined, invariantMessage: undefined, txHash: undefined }));
+    setState((s) => ({ ...s, phase: address ? "ready" : "disconnected", errorMessage: undefined, errorAction: undefined, evaluationId: undefined, evaluation: undefined, submissionId: undefined, submission: undefined, assessment: undefined, invariantMessage: undefined, evaluationTxHash: undefined, submissionTxHash: undefined, assessmentTxHash: undefined }));
     setEvalTitle("");
     setEvalDesc("");
     setWorkContent("");
@@ -750,10 +755,10 @@ export default function App() {
                       </p>
                     </div>
                   )}
-                  {state.txHash && (
+                  {state.evaluationTxHash && (
                     <div className="mt-3 pt-3 border-t border-border">
                       <p className="text-xs text-muted font-mono">
-                        Tx: {truncateAddress(state.txHash)}
+                        Tx: {truncateAddress(state.evaluationTxHash)}
                       </p>
                     </div>
                   )}
@@ -845,9 +850,9 @@ export default function App() {
                     </p>
                   </div>
                 )}
-                {state.txHash && (
+                {state.submissionTxHash && (
                   <p className="pl-5 text-xs text-muted font-mono">
-                    Tx: {truncateAddress(state.txHash)}
+                    Tx: {truncateAddress(state.submissionTxHash)}
                   </p>
                 )}
                 {state.phase === "work_submitted" && (
@@ -942,9 +947,9 @@ export default function App() {
                       </p>
                     </div>
                   </div>
-                  {state.txHash && (
+                  {state.assessmentTxHash && (
                     <p className="mt-3 text-xs text-muted font-mono">
-                      Consensus Tx: {truncateAddress(state.txHash)}
+                      Consensus Tx: {truncateAddress(state.assessmentTxHash)}
                     </p>
                   )}
                 </div>
@@ -1025,7 +1030,7 @@ export default function App() {
           <p className="text-xs text-muted pointer-events-auto text-right">
             Contract:{" "}
             <a
-              href={`https://explorer.studio.genlayer.com/contract/${CONTRACT_ADDRESS}`}
+              href={`https://explorer-studio.genlayer.com/address/${CONTRACT_ADDRESS}`}
               target="_blank"
               rel="noreferrer"
               className="hover:text-primary transition-colors cursor-pointer"

@@ -3,10 +3,9 @@ import { studionet } from "genlayer-js/chains";
 import { TransactionStatus } from "genlayer-js/types";
 
 /**
- * Contract address must be supplied via environment variable.
- * The application refuses to start without it.
+ * Contract address
  */
-const rawAddress = import.meta.env.VITE_QUALIS_CONTRACT_ADDRESS;
+const rawAddress = "0xC729B58f80111972028d0214f07A6AA9dA68ed6c";
 
 let CONTRACT_ADDRESS: `0x${string}` = rawAddress as `0x${string}`;
 
