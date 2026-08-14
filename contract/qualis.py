@@ -1,19 +1,26 @@
-# genlayer version: 0.1.0
+# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
-import genlayer as gl
-from genlayer import UserError
+from dataclasses import dataclass
+
+from genlayer import *
 
 
+@allow_storage
+@dataclass
 class Evaluation:
     title: str
     description: str
 
 
+@allow_storage
+@dataclass
 class Submission:
     evaluation_id: u256
     content: str
 
 
+@allow_storage
+@dataclass
 class Assessment:
     submission_id: u256
     decision: str
@@ -51,16 +58,16 @@ class Qualis(gl.Contract):
     @gl.public.write
     def create_evaluation(self, title: str, description: str) -> None:
         if len(title) == 0:
-            raise UserError("Invalid title: cannot be empty")
+            raise gl.vm.UserError("Invalid title: cannot be empty")
         if len(description) == 0:
-            raise UserError("Invalid description: cannot be empty")
+            raise gl.vm.UserError("Invalid description: cannot be empty")
 
         self.evaluations.append(Evaluation(title=title, description=description))
 
     @gl.public.view
     def get_evaluation(self, evaluation_id: u256) -> Evaluation:
         if evaluation_id >= len(self.evaluations):
-            raise UserError("Evaluation does not exist")
+            raise gl.vm.UserError("Evaluation does not exist")
         return self.evaluations[evaluation_id]
 
     # ------------------------------------------------------------------
@@ -69,9 +76,9 @@ class Qualis(gl.Contract):
     @gl.public.write
     def submit_work(self, evaluation_id: u256, content: str) -> None:
         if evaluation_id >= len(self.evaluations):
-            raise UserError("Evaluation does not exist")
+            raise gl.vm.UserError("Evaluation does not exist")
         if len(content) == 0:
-            raise UserError("Invalid submission content: cannot be empty")
+            raise gl.vm.UserError("Invalid submission content: cannot be empty")
 
         self.submissions.append(Submission(evaluation_id=evaluation_id, content=content))
         self.submission_assessed.append(False)
@@ -79,7 +86,7 @@ class Qualis(gl.Contract):
     @gl.public.view
     def get_submission(self, submission_id: u256) -> Submission:
         if submission_id >= len(self.submissions):
-            raise UserError("Submission does not exist")
+            raise gl.vm.UserError("Submission does not exist")
         return self.submissions[submission_id]
 
     # ------------------------------------------------------------------
@@ -89,11 +96,11 @@ class Qualis(gl.Contract):
     def assess_submission(self, submission_id: u256) -> None:
         # 1. Verify submission exists
         if submission_id >= len(self.submissions):
-            raise UserError("Submission does not exist")
+            raise gl.vm.UserError("Submission does not exist")
 
         # 2. Verify one-assessment invariant
         if self.submission_assessed[submission_id]:
-            raise UserError("Submission already assessed")
+            raise gl.vm.UserError("Submission already assessed")
 
         # 3. Load evaluation and submission into locals
         #    (storage is inaccessible inside non-deterministic blocks)
@@ -125,7 +132,7 @@ No other text. Only valid JSON."""
             reasoning = parsed["reasoning"]
 
             if decision not in ["APPROVED", "REJECTED"]:
-                raise UserError("Invalid decision from evaluator")
+                raise gl.vm.UserError("Invalid decision from evaluator")
 
             return {"decision": decision, "reasoning": reasoning}
 
@@ -179,26 +186,26 @@ No other text. Only valid JSON."""
     @gl.public.view
     def get_assessment(self, assessment_id: u256) -> Assessment:
         if assessment_id >= len(self.assessments):
-            raise UserError("Assessment does not exist")
+            raise gl.vm.UserError("Assessment does not exist")
         return self.assessments[assessment_id]
 
     @gl.public.view
     def get_assessment_by_submission(self, submission_id: u256) -> Assessment:
         if submission_id >= len(self.submissions):
-            raise UserError("Submission does not exist")
+            raise gl.vm.UserError("Submission does not exist")
         if not self.submission_assessed[submission_id]:
-            raise UserError("Submission has not been assessed")
+            raise gl.vm.UserError("Submission has not been assessed")
 
         for assessment in self.assessments:
             if assessment.submission_id == submission_id:
                 return assessment
 
-        raise UserError("Assessment not found")
+        raise gl.vm.UserError("Assessment not found")
 
     @gl.public.view
     def has_assessment(self, submission_id: u256) -> bool:
         if submission_id >= len(self.submissions):
-            raise UserError("Submission does not exist")
+            raise gl.vm.UserError("Submission does not exist")
         return self.submission_assessed[submission_id]
 
     # ------------------------------------------------------------------
