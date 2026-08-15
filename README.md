@@ -53,14 +53,16 @@ Qualis uses GenLayer's execution model for that part of the protocol.
 
 The boundary is:
 
-**Deterministic protocol state**
+### Deterministic Protocol State
+
 - Evaluation criteria
 - Submitted Work
 - Assessment records
 - Assessment status
 - Submission state
 
-**Non-deterministic execution**
+### Non-Deterministic Execution
+
 - Evaluating Work against Evaluation criteria
 - Validator comparison of the resulting decision
 
@@ -103,72 +105,98 @@ This is the core reason Qualis uses GenLayer rather than a conventional smart co
               │ Canonical Protocol      │
               │ State                   │
               └─────────────────────────┘
-Intelligent Contract
+```
 
-The core contract is contract/qualis.py.
+---
 
-Core Storage
+## Intelligent Contract
+
+The core contract is:
+
+`contract/qualis.py`
+
+### Core Storage
+
+The contract maintains:
+
+```text
 DynArray[Evaluation] evaluations
 DynArray[Submission] submissions
 DynArray[Assessment] assessments
 DynArray[bool] submission_assessed
-Lifecycle Methods
-Method	Type	Purpose
-create_evaluation	Write	Creates an Evaluation
-submit_work	Write	Creates a Submission
-assess_submission	Write	Executes the non-deterministic assessment
-get_evaluation	View	Reads Evaluation data
-get_submission	View	Reads Submission data
-get_assessment_by_submission	View	Reads the canonical Assessment
-has_assessment	View	Checks whether a Submission is already assessed
-get_stats	View	Returns protocol counts
-Assessment and Consensus
+```
 
-assess_submission is the GenLayer-specific part of Qualis.
+### Lifecycle Methods
+
+| Method | Type | Purpose |
+|---|---|---|
+| `create_evaluation` | Write | Creates an Evaluation |
+| `submit_work` | Write | Creates a Submission |
+| `assess_submission` | Write | Executes the non-deterministic assessment |
+| `get_evaluation` | View | Reads Evaluation data |
+| `get_submission` | View | Reads Submission data |
+| `get_assessment_by_submission` | View | Reads the canonical Assessment |
+| `has_assessment` | View | Checks whether a Submission is already assessed |
+| `get_stats` | View | Returns protocol counts |
+
+---
+
+## Assessment and Consensus
+
+`assess_submission` is the GenLayer-specific part of Qualis.
 
 The contract:
 
-Verifies that the Submission exists and has not already been assessed.
-Loads the Evaluation criteria and submitted Work.
-Executes the evaluation through GenLayer's non-deterministic execution.
-Uses validator execution to compare the resulting decision.
-Persists the resulting Assessment.
-Marks the Submission as assessed.
+1. Verifies that the Submission exists and has not already been assessed.
+2. Loads the Evaluation criteria and submitted Work.
+3. Executes the evaluation through GenLayer's **non-deterministic execution**.
+4. Uses validator execution to compare the resulting decision.
+5. Persists the resulting Assessment.
+6. Marks the Submission as assessed.
 
 The frontend does not generate or fabricate the Assessment.
 
-After the transaction reaches FINALIZED, the frontend reads the Assessment from the Intelligent Contract and displays it as Canonical Protocol State.
+After the transaction reaches `FINALIZED`, the frontend reads the Assessment from the Intelligent Contract and displays it as **Canonical Protocol State**.
 
-One-Assessment Invariant
+---
 
-Each Submission can have only one canonical Assessment.
+## One-Assessment Invariant
 
-The invariant is enforced by the Intelligent Contract:
+Each Submission can have only **one canonical Assessment**.
 
+The Intelligent Contract enforces this invariant:
+
+```python
 if self.submission_assessed[submission_id]:
     raise UserError("Submission already assessed")
+```
 
-Qualis exposes Verify Invariant to demonstrate this behavior.
+Qualis exposes **Verify Invariant** to demonstrate this behavior.
 
-The verification flow:
+The verification flow is:
 
+```text
 Existing Assessment
-        │
-        ▼
+        |
+        v
 Attempt second assessment
-        │
-        ▼
+        |
+        v
 Contract rejects duplicate
-        │
-        ▼
+        |
+        v
 No second Assessment created
+```
 
-A wallet rejection, RPC failure, timeout, or transaction that does not reach finality is not treated as proof of contract enforcement.
+A wallet rejection, RPC failure, timeout, or transaction that does not reach finality is **not** treated as proof of contract enforcement.
 
-Frontend
+---
 
-The frontend is a React application with the protocol lifecycle represented explicitly in application state.
+## Frontend
 
+Qualis uses React for the application interface.
+
+```text
 src/
 ├── App.tsx
 ├── main.tsx
@@ -176,126 +204,196 @@ src/
 └── lib/
     ├── genlayer.ts
     └── qualis.ts
+```
 
-src/lib/qualis.ts contains the contract interaction layer.
+### `src/lib/genlayer.ts`
 
-src/App.tsx manages the lifecycle UI and wallet interaction.
+Handles GenLayer client initialization, network configuration, and environment validation.
 
-The frontend uses finalized transaction state and contract reads rather than inventing protocol results.
+### `src/lib/qualis.ts`
 
-Transaction Lifecycle
+Contains the contract interaction layer and transaction lifecycle handling.
+
+### `src/App.tsx`
+
+Manages the protocol lifecycle UI, application state, and wallet interaction.
+
+The frontend uses finalized transaction state and canonical contract reads rather than inventing protocol results.
+
+---
+
+## Transaction Lifecycle
 
 Every protocol write follows:
 
+```text
 Validate prerequisites
-        ↓
+        |
+        v
 Wallet signature
-        ↓
+        |
+        v
 Broadcast transaction
-        ↓
+        |
+        v
 Wait for FINALIZED
-        ↓
+        |
+        v
 Read canonical contract state
-        ↓
+        |
+        v
 Update UI
+```
 
-Transaction hashes are stored independently for:
+Transaction hashes are stored independently for each lifecycle stage:
 
-evaluationTxHash
-submissionTxHash
-assessmentTxHash
+- `evaluationTxHash`
+- `submissionTxHash`
+- `assessmentTxHash`
 
-This allows the complete lifecycle to remain auditable from the UI.
+This keeps the complete transaction lifecycle visible and auditable from the interface.
 
-Running Qualis
-Requirements
-Node.js
-A compatible EIP-1193 wallet such as MetaMask or Rabby
-A funded GenLayer Studionet wallet
-GEN for transaction fees
-Install
+---
+
+## Running Qualis
+
+### Requirements
+
+- Node.js
+- An EIP-1193 compatible wallet such as MetaMask or Rabby
+- A funded GenLayer Studionet wallet
+- GEN tokens for transaction fees
+
+### Install
+
+```bash
 npm install
+```
 
-Create .env from .env.example and set:
+Create `.env` from `.env.example` and configure:
 
+```env
 VITE_QUALIS_CONTRACT_ADDRESS=0xYOUR_DEPLOYED_CONTRACT_ADDRESS
+```
 
-Then run:
+Start the development server:
 
+```bash
 npm run dev
-Production Build
+```
+
+### Production Build
+
+```bash
 npm run build
-Studionet
+```
 
-Qualis currently targets GenLayer Studionet.
+---
 
-Parameter	Value
-Network	GenLayer Studionet
-Chain ID	61999
-Currency	GEN
-RPC	https://studio.genlayer.com/api
+## Studionet
 
-Deploy the contract through GenLayer Studio, then place the resulting contract address in the environment configuration.
+Qualis currently targets **GenLayer Studionet**.
 
-Demo
+| Parameter | Value |
+|---|---|
+| Network | GenLayer Studionet |
+| Chain ID | `61999` |
+| Currency | `GEN` |
+| RPC | `https://studio.genlayer.com/api` |
 
-A complete demonstration follows:
+Deploy the Intelligent Contract through GenLayer Studio and place the resulting contract address in the environment configuration.
 
+The current deployed contract is:
+
+```text
+0xC729B58f80111972028d0214f07A6AA9dA68ed6c
+```
+
+---
+
+## Demo
+
+A complete Qualis demonstration follows this lifecycle:
+
+```text
 Create Evaluation
-       ↓
+        |
+        v
 Submit Work
-       ↓
+        |
+        v
 Generate Assessment
-       ↓
+        |
+        v
 Canonical Assessment
-       ↓
+        |
+        v
 Verify Invariant
+```
 
-For example:
+### Example Evaluation
 
-Evaluation
+**Title**
 
-Team 1 through Team 5 compete; the submission should identify the winning team.
+`Best Team Wins`
 
-Work
+**Criteria**
 
-Team 1 wins.
+> Team 1 through Team 5 compete; the submission should identify the winning team.
 
-Assessment
+### Example Work
 
-The Intelligent Contract produces an APPROVED or REJECTED decision with reasoning through GenLayer's non-deterministic execution.
+> Team 1 wins.
 
-Invariant
+### Assessment
 
-Attempting to assess the same Submission again results in the contract-level duplicate-assessment rejection.
+The Intelligent Contract produces an **APPROVED** or **REJECTED** decision with reasoning through GenLayer's **non-deterministic execution**.
 
-Known Limitations
-ID Derivation
+### Invariant
 
-The frontend derives newly created IDs from the finalized protocol count.
+Attempting to assess the same Submission again results in the Intelligent Contract rejecting the duplicate assessment.
 
-For example:
+---
 
+## Known Limitations
+
+### ID Derivation
+
+The frontend derives newly created IDs from the finalized protocol count:
+
+```text
 newId = totalCount - 1
+```
 
-This is suitable for the demonstration workflow, but concurrent creators could race and observe the wrong newly-created ID. A production implementation would use a stronger user-specific or transaction-bound ID retrieval strategy.
+This is suitable for the demonstration workflow.
 
-Studionet Availability
+Concurrent creators could potentially race and observe the wrong newly-created ID. A production implementation would use a stronger user-specific or transaction-bound ID retrieval strategy.
+
+### Studionet Availability
 
 Studionet is a hosted development environment. RPC availability and rate limits can affect reads, transaction submission, and finality.
 
-Evaluation Output
+### Assessment Output
 
-The assessment depends on the non-deterministic execution producing the expected structured result. Invalid or malformed execution output can cause an assessment transaction to fail.
+The assessment depends on GenLayer's non-deterministic execution producing the expected structured result. Invalid or malformed execution output can cause an assessment transaction to fail.
 
-Built With
-GenLayer Intelligent Contracts
-GenLayer non-deterministic execution
-GenLayer Studionet
-genlayer-js
-React
-TypeScript
-Vite
-License
+---
 
-MIT License
+## Built With
+
+- **GenLayer Intelligent Contracts**
+- **GenLayer non-deterministic execution**
+- **GenLayer Studionet**
+- **genlayer-js**
+- **React**
+- **TypeScript**
+- **Vite**
+
+---
+
+## License
+
+**MIT License**
+
+
+THE SOFTWARE.
