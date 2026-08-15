@@ -156,7 +156,15 @@ export default function App() {
 
   const setError = useCallback((message: string, action: string) => {
     console.error(`[QUALIS ERROR] ${action}:`, message);
-    setState({ phase: "error", errorMessage: message, errorAction: action });
+    setState((s) => {
+      let p = s.phase;
+      if (p === "connecting") p = "disconnected";
+      else if (p === "creating_evaluation") p = "ready";
+      else if (p === "submitting_work") p = "ready_for_submission";
+      else if (p === "assessing") p = "ready_for_assessment";
+      else if (p === "verifying_invariant") p = "assessment_finalized";
+      return { ...s, phase: p, errorMessage: message, errorAction: action };
+    });
   }, []);
 
   // --------------------------------------------------------------
@@ -579,7 +587,7 @@ export default function App() {
         )}
 
         {/* Error state */}
-        {state.phase === "error" && (
+        {state.errorMessage && state.phase !== "wrong_network" && (
           <section className="mb-12 p-4 border border-red-800 bg-red-950/30 rounded">
             <h3 className="text-error font-semibold mb-1">Transaction Failed</h3>
             <p className="text-red-200/80 text-sm">{state.errorMessage}</p>
@@ -588,10 +596,10 @@ export default function App() {
             </p>
             <div className="mt-3 flex gap-2">
               <button
-                onClick={reset}
+                onClick={() => setState((s) => ({ ...s, errorMessage: undefined, errorAction: undefined }))}
                 className="text-xs px-3 py-1.5 border border-red-700 text-error rounded hover:bg-red-900/50"
               >
-                Reset
+                Dismiss
               </button>
             </div>
           </section>
@@ -622,14 +630,14 @@ export default function App() {
                     {evaluations.map((e) => {
                       const phase = e.lifecycle.phase;
                       let statusLabel = "Evaluation Created";
-                      let actionLabel = "Submit Work →";
+                      let actionLabel = "Submit Work";
                       
                       if (phase === "work_submitted") {
                         statusLabel = "Work Submitted";
-                        actionLabel = "Continue Assessment →";
+                        actionLabel = "Generate Assessment";
                       } else if (phase === "assessment_finalized") {
                         statusLabel = "Canonical Result";
-                        actionLabel = "View Result →";
+                        actionLabel = "Verify Invariant";
                       }
 
                       return (

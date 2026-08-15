@@ -6,6 +6,30 @@ import {
 } from "./genlayer";
 
 
+
+async function safeWriteContract(writeClient: any, args: any): Promise<string> {
+  let attempt = 0;
+  while (attempt < 3) {
+    try {
+      return (await writeClient.writeContract(args)) as string;
+    } catch (err: any) {
+      const msg = err?.message || err?.toString() || "";
+      if (msg.includes("User rejected") || err?.code === 4001 || msg.includes("rejected in your wallet")) {
+        throw err;
+      }
+      if (msg.includes("Failed to fetch") || msg.includes("fetch") || msg.includes("network")) {
+        attempt++;
+        if (attempt >= 3) throw err;
+        console.warn(`[QUALIS RPC] writeContract network error, retrying ${attempt}/3...`, err);
+        await new Promise((res) => setTimeout(res, 1500 * attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 // ------------------------------------------------------------------
 // RPC Retry Wrapper
 // ------------------------------------------------------------------
@@ -161,7 +185,7 @@ export async function createEvaluation(
   await switchToStudionet(provider);
 
   // BROADCAST
-  const txHash = await writeClient.writeContract({
+  const txHash = await safeWriteContract(writeClient, {
     address: CONTRACT_ADDRESS,
     functionName: "create_evaluation",
     args: [t, d],
@@ -229,7 +253,7 @@ export async function submitWork(
   const writeClient = createWriteClient(address as `0x${string}`, provider);
   await switchToStudionet(provider);
 
-  const txHash = await writeClient.writeContract({
+  const txHash = await safeWriteContract(writeClient, {
     address: CONTRACT_ADDRESS,
     functionName: "submit_work",
     args: [evaluationId, c],
@@ -293,7 +317,7 @@ export async function assessSubmission(
   const writeClient = createWriteClient(address as `0x${string}`, provider);
   await switchToStudionet(provider);
 
-  const txHash = await writeClient.writeContract({
+  const txHash = await safeWriteContract(writeClient, {
     address: CONTRACT_ADDRESS,
     functionName: "assess_submission",
     args: [submissionId],
@@ -372,7 +396,7 @@ export async function verifyInvariant(
 
   let txHash: string;
   try {
-    txHash = await writeClient.writeContract({
+    txHash = await safeWriteContract(writeClient, {
       address: CONTRACT_ADDRESS,
       functionName: "assess_submission",
       args: [submissionId],
@@ -505,24 +529,26 @@ export async function getEvaluationsLifecycleStates(
     const subId = BigInt(i);
     const sub = await getSubmission(subId);
     
-    if (idsToFind.has(sub.evaluation_id)) {
+    const evalId = BigInt(sub.evaluation_id);
+
+    if (idsToFind.has(evalId)) {
       const isAssessed = await hasAssessment(subId);
       if (isAssessed) {
         const assessment = await getAssessmentBySubmission(subId);
-        result.set(sub.evaluation_id, {
+        result.set(evalId, {
           phase: "assessment_finalized",
           submissionId: subId,
           submission: sub,
           assessment
         });
       } else {
-        result.set(sub.evaluation_id, {
+        result.set(evalId, {
           phase: "work_submitted",
           submissionId: subId,
           submission: sub
         });
       }
-      idsToFind.delete(sub.evaluation_id);
+      idsToFind.delete(evalId);
     }
   }
 
