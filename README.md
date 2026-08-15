@@ -394,6 +394,3 @@ The assessment depends on GenLayer's non-deterministic execution producing the e
 ## License
 
 **MIT License**
-
-
-THE SOFTWARE.
